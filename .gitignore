@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+# Demo images (add locally — not committed)
+samples/source.jpg
+samples/demo.jpg
+artifacts/verification.json
+coverage/
+.DS_Store
+Thumbs.db
+*.pem
+*-credentials.json
+service-account*.json
+.cache/
+models/

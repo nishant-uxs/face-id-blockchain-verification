@@ -1,0 +1,48 @@
+{
+  "name": "hh-goa-verification-engine",
+  "version": "1.0.0",
+  "description": "HH Goa 2026 Task #3 — Face ID + Blockchain Verification Pipeline",
+  "type": "module",
+  "engines": {
+    "node": ">=20 <=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "verify": "tsx src/cli/index.ts verify",
+    "audit": "tsx src/cli/index.ts audit",
+    "deploy": "tsx scripts/deploy.ts",
+    "self-test": "tsx scripts/self-test.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:failure": "tsx scripts/failure-tests.ts",
+    "compare-providers": "tsx scripts/compare-providers.ts",
+    "prepare-demo": "tsx scripts/prepare-demo.ts"
+  },
+  "keywords": [
+    "hacker-house-goa",
+    "face-detection",
+    "reverse-image-search",
+    "blockchain",
+    "base-sepolia",
+    "ipfs"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@google-cloud/vision": "^4.3.2",
+    "boxen": "^8.0.1",
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "dotenv": "^16.4.7",
+    "ora": "^8.2.0",
+    "pinata": "^2.1.0",
+    "sharp": "^0.33.5",
+    "viem": "^2.23.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "solc": "^0.8.28",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.8"
+  }
+}
