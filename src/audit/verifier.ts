@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createPublicClient, decodeEventLog, http } from "viem";
-import { baseSepolia } from "viem/chains";
+import { sepolia } from "viem/chains";
 import type { AppConfig } from "../config/env.js";
 import { AuditError } from "../utils/errors.js";
 import { computeCommitmentHash, type VerificationRecord } from "../evidence/builder.js";
@@ -102,7 +102,7 @@ export async function auditVerification(
         `expected ${BRAND.chain.chainId}, got ${record.blockchain.chainId}`
       );
     }
-    pass("BLOCKCHAIN", "Base Sepolia", `chainId ${record.blockchain.chainId}`);
+    pass("BLOCKCHAIN", "Ethereum Sepolia", `chainId ${record.blockchain.chainId}`);
 
     if (record.blockchain.contractAddress.toLowerCase() !== config.contractAddress?.toLowerCase()) {
       fail("BLOCKCHAIN", "Contract address", "does not match configured CONTRACT_ADDRESS");
@@ -110,7 +110,7 @@ export async function auditVerification(
     pass("BLOCKCHAIN", "Contract address", record.blockchain.contractAddress);
 
     const publicClient = createPublicClient({
-      chain: baseSepolia,
+      chain: sepolia,
       transport: http(config.rpcUrl),
     });
 
@@ -140,7 +140,7 @@ export async function auditVerification(
     });
 
     if (!receipt) {
-      fail("BLOCKCHAIN", "Transaction receipt", "not found on Base Sepolia");
+      fail("BLOCKCHAIN", "Transaction receipt", "not found on Ethereum Sepolia");
     }
     if (receipt.status !== "success") {
       fail("BLOCKCHAIN", "Transaction receipt", "transaction did not succeed");

@@ -5,7 +5,7 @@ import {
   type Hash,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
+import { sepolia } from "viem/chains";
 import { VERIFICATION_REGISTRY_ABI } from "./abi.js";
 import type { AppConfig } from "../config/env.js";
 import { sha256HexWithPrefix } from "../hashing/sha256.js";
@@ -38,8 +38,8 @@ export async function anchorOnChain(params: {
   const account = privateKeyToAccount(config.privateKey);
   const transport = http(config.rpcUrl);
 
-  const publicClient = createPublicClient({ chain: baseSepolia, transport });
-  const walletClient = createWalletClient({ account, chain: baseSepolia, transport });
+  const publicClient = createPublicClient({ chain: sepolia, transport });
+  const walletClient = createWalletClient({ account, chain: sepolia, transport });
 
   const existing = await publicClient.readContract({
     address: config.contractAddress,
@@ -58,7 +58,7 @@ export async function anchorOnChain(params: {
     functionName: "recordVerification",
     args: [recordHash, ipfsCid],
     account,
-    chain: baseSepolia,
+    chain: sepolia,
   });
 
   const receipt = await publicClient.waitForTransactionReceipt({
@@ -86,7 +86,7 @@ export async function readChainRecord(
   }
 
   const publicClient = createPublicClient({
-    chain: baseSepolia,
+    chain: sepolia,
     transport: http(config.rpcUrl),
   });
 

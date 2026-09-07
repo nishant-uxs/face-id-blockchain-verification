@@ -105,12 +105,12 @@ Evidence must come from a **runtime API response**, never hardcoded.
 | **On-chain** | `recordHash`, `ipfsCid`, `timestamp`, `submitter` |
 | **Never on-chain** | Raw face embeddings, API keys, full images |
 
-## Why Base Sepolia?
+## Why Ethereum Sepolia?
 
-- Real EVM testnet (chainId `84532`)
-- Low-cost transactions for demos
-- Official Base documentation and viem support
-- Public explorer at [sepolia.basescan.org](https://sepolia.basescan.org)
+- Real EVM public testnet (chainId `11155111`)
+- Easy faucet access for demos (no Base mainnet-balance gate)
+- Official explorer at [sepolia.etherscan.io](https://sepolia.etherscan.io)
+- viem / Solidity tooling works unchanged
 
 ## Demo
 

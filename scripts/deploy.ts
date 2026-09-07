@@ -6,10 +6,10 @@ import {
   createPublicClient,
   createWalletClient,
   http,
-  parseAbi,
+  type Abi,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
+import { sepolia } from "viem/chains";
 import { config } from "dotenv";
 
 config();
@@ -17,7 +17,7 @@ config();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
 
-function compileContract(): { abi: readonly unknown[]; bytecode: `0x${string}` } {
+function compileContract(): { abi: Abi; bytecode: `0x${string}` } {
   const source = readFileSync(resolve(root, "contracts/VerificationRegistry.sol"), "utf-8");
   const input = {
     language: "Solidity",
@@ -36,14 +36,14 @@ function compileContract(): { abi: readonly unknown[]; bytecode: `0x${string}` }
 
   const contract = output.contracts["VerificationRegistry.sol"]["VerificationRegistry"];
   return {
-    abi: contract.abi,
+    abi: contract.abi as Abi,
     bytecode: `0x${contract.evm.bytecode.object}` as `0x${string}`,
   };
 }
 
 async function main(): Promise<void> {
   const privateKey = process.env.PRIVATE_KEY as `0x${string}` | undefined;
-  const rpcUrl = process.env.RPC_URL ?? "https://sepolia.base.org";
+  const rpcUrl = process.env.RPC_URL ?? "https://ethereum-sepolia-rpc.publicnode.com";
 
   if (!privateKey) {
     throw new Error("PRIVATE_KEY required in .env");
@@ -57,19 +57,27 @@ async function main(): Promise<void> {
   writeFileSync(resolve(artifactsDir, "VerificationRegistry.json"), JSON.stringify({ abi, bytecode }, null, 2));
 
   const account = privateKeyToAccount(privateKey);
-  const publicClient = createPublicClient({ chain: baseSepolia, transport: http(rpcUrl) });
+  const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
   const walletClient = createWalletClient({
     account,
-    chain: baseSepolia,
+    chain: sepolia,
     transport: http(rpcUrl),
   });
 
+  const balance = await publicClient.getBalance({ address: account.address });
   console.log(`Deploying from ${account.address}…`);
+  console.log(`Balance: ${balance} wei`);
+  if (balance === 0n) {
+    throw new Error(
+      "Wallet has 0 ETH on Ethereum Sepolia. Get test ETH from a Sepolia faucet, then retry."
+    );
+  }
+
   const hash = await walletClient.deployContract({
-    abi: parseAbi(abi as Parameters<typeof parseAbi>[0]),
+    abi,
     bytecode,
     account,
-    chain: baseSepolia,
+    chain: sepolia,
   });
 
   console.log(`Transaction: ${hash}`);
@@ -79,10 +87,10 @@ async function main(): Promise<void> {
     throw new Error("Deployment failed — no contract address in receipt");
   }
 
-  console.log(`\n✓ Deployed VerificationRegistry to Base Sepolia`);
+  console.log(`\n✓ Deployed VerificationRegistry to Ethereum Sepolia`);
   console.log(`  Address: ${receipt.contractAddress}`);
   console.log(`  Block:   ${receipt.blockNumber}`);
-  console.log(`  Explorer: https://sepolia.basescan.org/address/${receipt.contractAddress}`);
+  console.log(`  Explorer: https://sepolia.etherscan.io/address/${receipt.contractAddress}`);
   console.log(`\nAdd to .env:\n  CONTRACT_ADDRESS=${receipt.contractAddress}`);
 }
 

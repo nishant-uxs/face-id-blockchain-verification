@@ -1,141 +1,128 @@
-import { ImageAnnotatorClient, type protos } from "@google-cloud/vision";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { createCanvas, loadImage, type Image } from "canvas";
+import "@tensorflow/tfjs";
 import { cropFaceRegion } from "../utils/image.js";
 import { PipelineError } from "../utils/errors.js";
 import { sha256Hex } from "../hashing/sha256.js";
 import type { AppConfig } from "../config/env.js";
 import type { DetectedFace, FaceDetectionResult, FaceEncoding } from "./types.js";
 
-type FaceAnnotation = protos.google.cloud.vision.v1.IFaceAnnotation;
+const require = createRequire(import.meta.url);
+const faceapi = require("@vladmandic/face-api/dist/face-api.node.js") as typeof import("@vladmandic/face-api");
+const canvasPkg = require("canvas") as typeof import("canvas");
 
-function verticesToBbox(vertices: protos.google.cloud.vision.v1.IVertex[] | null | undefined): {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-} {
-  const pts = vertices ?? [];
-  if (pts.length === 0) {
-    return { x: 0, y: 0, width: 0, height: 0 };
-  }
-  const xs = pts.map((p) => p.x ?? 0);
-  const ys = pts.map((p) => p.y ?? 0);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+faceapi.env.monkeyPatch({
+  Canvas: canvasPkg.Canvas,
+  Image: canvasPkg.Image,
+  ImageData: canvasPkg.ImageData,
+});
+
+let modelsLoaded = false;
+
+async function ensureModels(): Promise<void> {
+  if (modelsLoaded) return;
+  const pkgDir = dirname(require.resolve("@vladmandic/face-api/package.json"));
+  const modelPath = join(pkgDir, "model");
+  await faceapi.nets.ssdMobilenetv1.loadFromDisk(modelPath);
+  await faceapi.nets.faceLandmark68Net.loadFromDisk(modelPath);
+  await faceapi.nets.faceRecognitionNet.loadFromDisk(modelPath);
+  modelsLoaded = true;
 }
 
-function selectFace(faces: FaceAnnotation[], mode: AppConfig["faceSelection"]): {
-  face: FaceAnnotation;
-  index: number;
-} {
+function selectFace(
+  faces: Array<{ detection: { box: { x: number; y: number; width: number; height: number }; score: number } }>,
+  mode: AppConfig["faceSelection"]
+): DetectedFace {
   if (faces.length === 0) {
     throw new PipelineError("No face detected in image", "NO_FACE");
   }
 
   if (faces.length === 1 || mode === "first") {
-    return { face: faces[0]!, index: 0 };
+    const f = faces[0]!;
+    return {
+      bbox: {
+        x: f.detection.box.x,
+        y: f.detection.box.y,
+        width: f.detection.box.width,
+        height: f.detection.box.height,
+      },
+      confidence: f.detection.score,
+      index: 0,
+    };
   }
 
   let bestIndex = 0;
   let bestArea = 0;
   for (let i = 0; i < faces.length; i++) {
-    const bbox = verticesToBbox(faces[i]?.boundingPoly?.vertices);
-    const area = bbox.width * bbox.height;
+    const f = faces[i]!;
+    const area = f.detection.box.width * f.detection.box.height;
     if (area > bestArea) {
       bestArea = area;
       bestIndex = i;
     }
   }
-  return { face: faces[bestIndex]!, index: bestIndex };
+  const best = faces[bestIndex]!;
+  return {
+    bbox: {
+      x: best.detection.box.x,
+      y: best.detection.box.y,
+      width: best.detection.box.width,
+      height: best.detection.box.height,
+    },
+    confidence: best.detection.score,
+    index: bestIndex,
+  };
 }
 
-function encodeFaceFromVision(face: FaceAnnotation): FaceEncoding {
-  const bbox = verticesToBbox(face.boundingPoly?.vertices);
-  const landmarks = (face.landmarks ?? []).map((l) => ({
-    type: l.type,
-    x: Math.round((l.position?.x ?? 0) * 100) / 100,
-    y: Math.round((l.position?.y ?? 0) * 100) / 100,
-  }));
+function hashDescriptor(descriptor: Float32Array): string {
+  const quantized = Array.from(descriptor).map((v) => Math.round(v * 10000) / 10000);
+  return sha256Hex(JSON.stringify(quantized));
+}
 
-  const payload = {
-    bbox: {
-      x: Math.round(bbox.x),
-      y: Math.round(bbox.y),
-      width: Math.round(bbox.width),
-      height: Math.round(bbox.height),
-    },
-    landmarks,
-    confidence: Math.round((face.detectionConfidence ?? 0) * 10000) / 10000,
-    roll: face.rollAngle,
-    pan: face.panAngle,
-    tilt: face.tiltAngle,
+/**
+ * Local face detection — no Google Cloud / no billing required.
+ * Uses SSD MobileNet + face recognition net via @vladmandic/face-api + tfjs.
+ */
+export async function detectAndEncodeFace(
+  imageBuffer: Buffer,
+  config: Pick<AppConfig, "faceSelection">
+): Promise<FaceDetectionResult> {
+  await ensureModels();
+
+  const image = (await loadImage(imageBuffer)) as Image;
+  // Draw onto canvas so face-api has consistent ImageData in Node
+  const canvas = createCanvas(image.width, image.height);
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(image, 0, 0);
+
+  const detections = await faceapi
+    .detectAllFaces(canvas as unknown as Parameters<typeof faceapi.detectAllFaces>[0], new faceapi.SsdMobilenetv1Options({ minConfidence: 0.4 }))
+    .withFaceLandmarks()
+    .withFaceDescriptors();
+
+  if (detections.length === 0) {
+    throw new PipelineError("No face detected in image", "NO_FACE");
+  }
+
+  const selected = selectFace(detections, config.faceSelection);
+  const match = detections[selected.index];
+  if (!match?.descriptor) {
+    throw new PipelineError("Failed to generate face descriptor", "FACE_ENCODE_FAILED");
+  }
+
+  const faceCropBuffer = await cropFaceRegion(imageBuffer, selected.bbox);
+  const encoding: FaceEncoding = {
+    descriptorHash: hashDescriptor(match.descriptor),
+    dimensions: match.descriptor.length,
+    model: "ssdMobilenetv1+faceRecognitionNet (local/tfjs)",
   };
 
   return {
-    descriptorHash: sha256Hex(JSON.stringify(payload)),
-    dimensions: landmarks.length,
-    model: "google-cloud-vision-face-detection",
+    facesDetected: detections.length,
+    selectedFace: selected,
+    encoding,
+    faceCropSha256: sha256Hex(faceCropBuffer),
+    faceCropBuffer,
   };
-}
-
-export class VisionFaceDetector {
-  private client: ImageAnnotatorClient;
-
-  constructor(credentialsPath?: string) {
-    this.client = new ImageAnnotatorClient(
-      credentialsPath ? { keyFilename: credentialsPath } : undefined
-    );
-  }
-
-  async detectAndEncode(
-    imageBuffer: Buffer,
-    config: Pick<AppConfig, "faceSelection">
-  ): Promise<FaceDetectionResult> {
-    const [result] = await this.client.faceDetection({ image: { content: imageBuffer } });
-
-    if (result.error?.message) {
-      throw new Error(`Google Vision face detection error: ${result.error.message}`);
-    }
-
-    const faces = result.faceAnnotations ?? [];
-    const { face, index } = selectFace(faces, config.faceSelection);
-    const bbox = verticesToBbox(face.boundingPoly?.vertices);
-
-    if (bbox.width <= 0 || bbox.height <= 0) {
-      throw new PipelineError("Invalid face bounding box from detector", "FACE_BBOX_INVALID");
-    }
-
-    const selectedFace: DetectedFace = {
-      bbox,
-      confidence: face.detectionConfidence ?? 0,
-      index,
-    };
-
-    const faceCropBuffer = await cropFaceRegion(imageBuffer, bbox);
-    const encoding = encodeFaceFromVision(face);
-
-    return {
-      facesDetected: faces.length,
-      selectedFace,
-      encoding,
-      faceCropSha256: sha256Hex(faceCropBuffer),
-      faceCropBuffer,
-    };
-  }
-}
-
-export async function detectAndEncodeFace(
-  imageBuffer: Buffer,
-  config: Pick<AppConfig, "faceSelection" | "googleApplicationCredentials">
-): Promise<FaceDetectionResult> {
-  if (!config.googleApplicationCredentials) {
-    throw new PipelineError(
-      "Face detection requires GOOGLE_APPLICATION_CREDENTIALS (Google Cloud Vision)",
-      "MISSING_FACE_PROVIDER"
-    );
-  }
-  const detector = new VisionFaceDetector(config.googleApplicationCredentials);
-  return detector.detectAndEncode(imageBuffer, config);
 }

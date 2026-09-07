@@ -96,7 +96,7 @@ export async function runVerificationPipeline(
   );
   onDetail?.(`CID: ${ipfsCid}`);
 
-  onStep?.(8, TOTAL_STEPS, "Anchoring on Base Sepolia");
+  onStep?.(8, TOTAL_STEPS, "Anchoring on Ethereum Sepolia");
   const chainResult = await anchorOnChain({
     config,
     canonicalJsonSha256,

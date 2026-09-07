@@ -13,9 +13,9 @@ export const BRAND = {
     muted: "#5C7A6A",
   },
   chain: {
-    name: "Base Sepolia",
-    chainId: 84532,
-    explorer: "https://sepolia.basescan.org",
+    name: "Ethereum Sepolia",
+    chainId: 11155111,
+    explorer: "https://sepolia.etherscan.io",
   },
 } as const;
 

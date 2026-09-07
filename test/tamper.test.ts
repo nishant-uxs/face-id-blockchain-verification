@@ -63,8 +63,8 @@ describe("tamper detection (offline)", () => {
     const committable = makeCommittable();
     hash = computeCommitmentHash(committable);
     record = assembleFinalRecord(committable, "bafybeigdyrzt5sfp7udjm7rrmg2x6evg4ajqyjn6wsfv4bcvvljdcx5m", {
-      chain: "Base Sepolia",
-      chainId: 84532,
+      chain: "Ethereum Sepolia",
+      chainId: 11155111,
       contractAddress: "0x0000000000000000000000000000000000000001",
       transactionHash: "0x0000000000000000000000000000000000000000000000000000000000000001",
       blockNumber: 1,

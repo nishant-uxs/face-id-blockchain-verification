@@ -46,7 +46,7 @@ export function loadConfig(partial?: Partial<AppConfig>): AppConfig {
     serpApiKey: process.env.SERPAPI_KEY,
     pinataJwt: process.env.PINATA_JWT,
     pinataGateway: process.env.PINATA_GATEWAY ?? "gateway.pinata.cloud",
-    rpcUrl: process.env.RPC_URL ?? "https://sepolia.base.org",
+    rpcUrl: process.env.RPC_URL ?? "https://ethereum-sepolia-rpc.publicnode.com",
     privateKey: process.env.PRIVATE_KEY as `0x${string}` | undefined,
     contractAddress: process.env.CONTRACT_ADDRESS as `0x${string}` | undefined,
     maxImageBytes: Number(process.env.MAX_IMAGE_BYTES ?? 10 * 1024 * 1024),
@@ -59,17 +59,11 @@ export function loadConfig(partial?: Partial<AppConfig>): AppConfig {
 export function requireVerifyConfig(): AppConfig {
   const cfg = loadConfig();
 
-  requireEnv("GOOGLE_APPLICATION_CREDENTIALS");
-  if (!cfg.googleApplicationCredentials) {
+  // Face detection is local — Google is optional.
+  // Reverse-image search requires SerpAPI and/or Google Vision Web Detection.
+  if (!cfg.serpApiKey && !cfg.googleApplicationCredentials) {
     throw new ConfigError(
-      "GOOGLE_APPLICATION_CREDENTIALS is required for face detection and web detection",
-      "MISSING_GOOGLE_CREDENTIALS"
-    );
-  }
-
-  if (!cfg.googleApplicationCredentials && !cfg.serpApiKey) {
-    throw new ConfigError(
-      "At least one reverse-image provider is required: GOOGLE_APPLICATION_CREDENTIALS or SERPAPI_KEY",
+      "At least one reverse-image provider is required: SERPAPI_KEY (recommended) or GOOGLE_APPLICATION_CREDENTIALS",
       "MISSING_REVERSE_SEARCH_PROVIDER"
     );
   }
@@ -84,7 +78,6 @@ export function requireVerifyConfig(): AppConfig {
 
   return {
     ...cfg,
-    googleApplicationCredentials: requireEnv("GOOGLE_APPLICATION_CREDENTIALS"),
     pinataJwt: requireEnv("PINATA_JWT"),
     privateKey: requireEnv("PRIVATE_KEY") as `0x${string}`,
     contractAddress: requireEnv("CONTRACT_ADDRESS") as `0x${string}`,

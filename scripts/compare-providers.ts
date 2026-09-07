@@ -82,7 +82,10 @@ async function main(): Promise<void> {
   }
 
   if (serpKey) {
-    const provider = new SerpApiLensProvider(serpKey);
+    const provider = new SerpApiLensProvider(serpKey, {
+      pinataJwt: process.env.PINATA_JWT ?? "",
+      pinataGateway: process.env.PINATA_GATEWAY ?? "gateway.pinata.cloud",
+    });
     const start = Date.now();
     try {
       const result = await provider.search(buffer, hash);

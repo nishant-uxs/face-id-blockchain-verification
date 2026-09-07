@@ -58,11 +58,17 @@ function mergeResults(results: ReverseImageResult[], queryImageSha256: string): 
 export function createReverseImageProvider(config: AppConfig): ReverseImageProvider {
   const providers: ReverseImageProvider[] = [];
 
+  // Prefer SerpAPI first (no Google billing). Google Vision is optional secondary.
+  if (config.serpApiKey) {
+    providers.push(
+      new SerpApiLensProvider(config.serpApiKey, {
+        pinataJwt: config.pinataJwt ?? "",
+        pinataGateway: config.pinataGateway,
+      })
+    );
+  }
   if (config.googleApplicationCredentials) {
     providers.push(new GoogleVisionWebDetectionProvider(config.googleApplicationCredentials));
-  }
-  if (config.serpApiKey) {
-    providers.push(new SerpApiLensProvider(config.serpApiKey));
   }
 
   if (providers.length === 0) {

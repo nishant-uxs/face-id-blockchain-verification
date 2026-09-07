@@ -23,6 +23,34 @@ export async function uploadVerificationJson(
   return upload.cid;
 }
 
+export async function uploadPublicFile(
+  buffer: Buffer,
+  filename: string,
+  mimeType: string,
+  config: Pick<AppConfig, "pinataJwt" | "pinataGateway">
+): Promise<{ cid: string; url: string }> {
+  if (!config.pinataJwt) {
+    throw new Error("PINATA_JWT is required for IPFS upload");
+  }
+
+  const pinata = new PinataSDK({
+    pinataJwt: config.pinataJwt,
+    pinataGateway: config.pinataGateway,
+  });
+
+  const file = new File([buffer], filename, { type: mimeType });
+  const upload = await pinata.upload.public.file(file).name(filename);
+
+  if (!upload.cid) {
+    throw new Error("Pinata file upload succeeded but no CID returned");
+  }
+
+  return {
+    cid: upload.cid,
+    url: `https://${config.pinataGateway}/ipfs/${upload.cid}`,
+  };
+}
+
 export async function fetchVerificationFromIpfs(
   cid: string,
   gateway: string

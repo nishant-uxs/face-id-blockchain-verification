@@ -6,12 +6,17 @@ dist/
 # Demo images (add locally — not committed)
 samples/source.jpg
 samples/demo.jpg
+IMG_*.jpg
 artifacts/verification.json
+artifacts/hunt-*.json
+artifacts/serp-*.json
+artifacts/VerificationRegistry.json
 coverage/
 .DS_Store
 Thumbs.db
 *.pem
 *-credentials.json
 service-account*.json
+hhgoa-*.json
 .cache/
 models/

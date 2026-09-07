@@ -20,7 +20,6 @@ async function main(): Promise<void> {
   const image = await loadAndValidateImage(resolve(source), 10 * 1024 * 1024);
   const face = await detectAndEncodeFace(image.buffer, {
     faceSelection: "largest",
-    googleApplicationCredentials: process.env.GOOGLE_APPLICATION_CREDENTIALS,
   });
 
   const { x, y, width, height } = face.selectedFace.bbox;
