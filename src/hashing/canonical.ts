@@ -1,7 +1,10 @@
 /**
- * Canonical JSON serialization (deterministic hashing).
- * Sorts object keys recursively; arrays preserve order.
+ * Canonical JSON serialization for deterministic hashing.
+ * Recursively sorts object keys; arrays preserve order.
+ * (Key-sorted JSON — not full RFC 8785 JCS.)
  */
+import { sha256Hex } from "./sha256.js";
+
 export function canonicalize(value: unknown): string {
   return JSON.stringify(sortValue(value));
 }
@@ -20,8 +23,6 @@ function sortValue(value: unknown): unknown {
   }
   return sorted;
 }
-
-import { sha256Hex } from "./sha256.js";
 
 export function canonicalJsonHash(record: unknown): string {
   return sha256Hex(canonicalize(record));

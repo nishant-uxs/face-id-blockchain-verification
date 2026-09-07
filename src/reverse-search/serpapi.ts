@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import type { ReverseImageProvider, ReverseImageResult } from "./types.js";
 import { uploadPublicFile } from "../ipfs/pinata.js";
+import { PipelineError } from "../utils/errors.js";
 
 interface SerpApiLensMatch {
   link?: string;
@@ -15,6 +16,7 @@ interface SerpApiLensResponse {
   exact_matches?: SerpApiLensMatch[];
   organic_results?: Array<{ link?: string; title?: string; source?: string }>;
   image_sources?: Array<{ link?: string; title?: string; source?: string }>;
+  image_results?: SerpApiLensMatch[];
   error?: string;
   search_information?: { organic_results_state?: string };
 }
@@ -30,12 +32,25 @@ export class SerpApiLensProvider implements ReverseImageProvider {
   async search(imageBuffer: Buffer, queryImageSha256: string): Promise<ReverseImageResult> {
     const imageUrl = await this.resolvePublicImageUrl(imageBuffer);
 
-    // Run default Lens + exact_matches + reverse_image in parallel to widen coverage
+    // Default Lens + exact_matches + classic reverse image — parallel for coverage
     const [lensDefault, lensExact, reverse] = await Promise.all([
       this.callSerp({ engine: "google_lens", url: imageUrl }),
       this.callSerp({ engine: "google_lens", url: imageUrl, type: "exact_matches" }),
       this.callSerp({ engine: "google_reverse_image", image_url: imageUrl }),
     ]);
+
+    const responses = [
+      { label: "google_lens", data: lensDefault },
+      { label: "google_lens_exact", data: lensExact },
+      { label: "google_reverse_image", data: reverse },
+    ];
+    if (responses.every((r) => Boolean(r.data.error))) {
+      const detail = responses.map((r) => `${r.label}: ${r.data.error}`).join("; ");
+      throw new PipelineError(
+        `SerpAPI reverse-image search failed on all engines (${detail})`,
+        "REVERSE_SEARCH_PROVIDER_FAILED"
+      );
+    }
 
     const fullMatches: ReverseImageResult["fullMatches"] = [];
     const partialMatches: ReverseImageResult["partialMatches"] = [];
@@ -44,23 +59,20 @@ export class SerpApiLensProvider implements ReverseImageProvider {
 
     // Exact matches only → fullMatches
     for (const m of lensExact.exact_matches ?? lensExact.visual_matches ?? []) {
-      if (m.link) fullMatches.push({ url: m.link });
-      if (m.link) matchingPages.push({ url: m.link, pageTitle: m.title });
+      if (m.link) {
+        fullMatches.push({ url: m.link });
+        matchingPages.push({ url: m.link, pageTitle: m.title });
+      }
     }
 
-    // Default Lens visual_matches are SIMILAR products/faces — never treat as exact evidence pages
+    // Default Lens visual_matches are SIMILAR products/faces — never treat as exact evidence
     for (const m of lensDefault.visual_matches ?? []) {
       if (m.link) visuallySimilar.push({ url: m.link });
       if (m.image) visuallySimilar.push({ url: m.image });
       if (m.thumbnail) visuallySimilar.push({ url: m.thumbnail });
     }
 
-    // Organic results from Lens can be weak; keep as matching pages only if we also have exact/partial
-    for (const o of lensDefault.organic_results ?? []) {
-      if (o.link) matchingPages.push({ url: o.link, pageTitle: o.title });
-    }
-
-    // Classic reverse image results
+    // Classic reverse-image results → partial (stronger than visual-similar)
     for (const r of reverse.image_results ?? reverse.image_sources ?? []) {
       if (r.link) {
         partialMatches.push({ url: r.link });
@@ -71,6 +83,14 @@ export class SerpApiLensProvider implements ReverseImageProvider {
       if (m.link) {
         partialMatches.push({ url: m.link });
         matchingPages.push({ url: m.link, pageTitle: m.title });
+      }
+    }
+
+    // Organic Lens hits are weak — only keep as pages when stronger match signals already exist
+    const hasStrongerMatch = fullMatches.length > 0 || partialMatches.length > 0;
+    if (hasStrongerMatch) {
+      for (const o of lensDefault.organic_results ?? []) {
+        if (o.link) matchingPages.push({ url: o.link, pageTitle: o.title });
       }
     }
 
@@ -85,7 +105,7 @@ export class SerpApiLensProvider implements ReverseImageProvider {
     };
   }
 
-  private async callSerp(params: Record<string, string>): Promise<SerpApiLensResponse & { image_results?: SerpApiLensMatch[] }> {
+  private async callSerp(params: Record<string, string>): Promise<SerpApiLensResponse> {
     const qs = new URLSearchParams({ api_key: this.apiKey, ...params });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 45_000);
@@ -94,13 +114,9 @@ export class SerpApiLensProvider implements ReverseImageProvider {
         signal: controller.signal,
       });
       if (!response.ok) {
-        // Non-fatal for secondary engines
         return { error: `HTTP ${response.status}` };
       }
-      const data = (await response.json()) as SerpApiLensResponse & {
-        image_results?: SerpApiLensMatch[];
-      };
-      return data;
+      return (await response.json()) as SerpApiLensResponse;
     } catch (err) {
       return { error: err instanceof Error ? err.message : String(err) };
     } finally {
@@ -110,8 +126,9 @@ export class SerpApiLensProvider implements ReverseImageProvider {
 
   private async resolvePublicImageUrl(imageBuffer: Buffer): Promise<string> {
     if (!this.pinata?.pinataJwt) {
-      throw new Error(
-        "SerpAPI Google Lens needs a public image URL. Set PINATA_JWT so the query image can be hosted temporarily on IPFS."
+      throw new PipelineError(
+        "SerpAPI Google Lens needs a public image URL. Set PINATA_JWT so the query image can be hosted temporarily on IPFS.",
+        "MISSING_PINATA_FOR_SERP"
       );
     }
 

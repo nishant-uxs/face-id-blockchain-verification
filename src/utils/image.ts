@@ -67,14 +67,35 @@ export async function cropFaceRegion(
   imageBuffer: Buffer,
   bbox: { x: number; y: number; width: number; height: number }
 ): Promise<Buffer> {
-  const left = Math.max(0, Math.round(bbox.x));
-  const top = Math.max(0, Math.round(bbox.y));
-  const width = Math.max(1, Math.round(bbox.width));
-  const height = Math.max(1, Math.round(bbox.height));
+  try {
+    const meta = await sharp(imageBuffer).metadata();
+    const imgW = meta.width ?? 0;
+    const imgH = meta.height ?? 0;
+    if (imgW < 1 || imgH < 1) {
+      throw new PipelineError("Cannot crop face from image with invalid dimensions", "FACE_CROP_FAILED");
+    }
 
-  return sharp(imageBuffer)
-    .extract({ left, top, width, height })
-    .resize(224, 224, { fit: "cover" })
-    .jpeg({ quality: 92 })
-    .toBuffer();
+    let left = Math.max(0, Math.round(bbox.x));
+    let top = Math.max(0, Math.round(bbox.y));
+    let width = Math.max(1, Math.round(bbox.width));
+    let height = Math.max(1, Math.round(bbox.height));
+
+    if (left >= imgW || top >= imgH) {
+      throw new PipelineError("Face bounding box is outside image bounds", "FACE_CROP_FAILED");
+    }
+    width = Math.min(width, imgW - left);
+    height = Math.min(height, imgH - top);
+
+    return await sharp(imageBuffer)
+      .extract({ left, top, width, height })
+      .resize(224, 224, { fit: "cover" })
+      .jpeg({ quality: 92 })
+      .toBuffer();
+  } catch (err) {
+    if (err instanceof PipelineError) throw err;
+    throw new PipelineError(
+      `Failed to crop face region: ${err instanceof Error ? err.message : String(err)}`,
+      "FACE_CROP_FAILED"
+    );
+  }
 }

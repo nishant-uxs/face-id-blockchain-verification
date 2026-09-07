@@ -21,7 +21,7 @@
 npm run compare-providers -- ./samples/demo.jpg
 ```
 
-Both providers must return a `SOCIAL_POST` URL before running the full pipeline.
+At least one configured provider must return a `SOCIAL_POST` URL before running the full pipeline (SerpAPI alone is enough).
 
 ## Recording
 

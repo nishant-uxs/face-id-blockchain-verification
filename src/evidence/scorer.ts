@@ -1,7 +1,6 @@
 import { isValidHttpUrl } from "../utils/urls.js";
 import {
   classifyUrl,
-  isAcceptableSocialEvidence,
   isReferenceArchiveDomain,
   type PageClassification,
   type SocialPlatform,
@@ -9,6 +8,13 @@ import {
 import type { ReverseImageResult } from "../reverse-search/types.js";
 
 export type MatchType = "full" | "partial" | "page";
+
+/** Higher rank wins; used instead of hidden score bonuses so CLI totals stay honest. */
+const MATCH_RANK: Record<MatchType, number> = {
+  full: 3,
+  partial: 2,
+  page: 1,
+};
 
 export interface EvidenceCandidate {
   selectedMatchUrl: string;
@@ -167,25 +173,23 @@ export function selectBestEvidence(
     return null;
   }
 
-  let best = candidates[0]!;
-  let bestScore =
-    scoreEvidence(best.candidate, best.matchType).total +
-    best.priority +
-    (best.candidate.isSocialPost ? 50 : 0);
+  candidates.sort((a, b) => {
+    const rankDiff = MATCH_RANK[b.matchType] - MATCH_RANK[a.matchType];
+    if (rankDiff !== 0) return rankDiff;
 
-  for (const c of candidates.slice(1)) {
-    const s =
-      scoreEvidence(c.candidate, c.matchType).total +
-      c.priority +
-      (c.candidate.isSocialPost ? 50 : 0);
-    if (s > bestScore) {
-      best = c;
-      bestScore = s;
-    }
-  }
+    const socialDiff = Number(b.candidate.isSocialPost) - Number(a.candidate.isSocialPost);
+    if (socialDiff !== 0) return socialDiff;
 
+    const priorityDiff = b.priority - a.priority;
+    if (priorityDiff !== 0) return priorityDiff;
+
+    return (
+      scoreEvidence(b.candidate, b.matchType).total -
+      scoreEvidence(a.candidate, a.matchType).total
+    );
+  });
+
+  const best = candidates[0]!;
   const score = scoreEvidence(best.candidate, best.matchType);
   return { candidate: best.candidate, score };
 }
-
-export { isAcceptableSocialEvidence };

@@ -10,6 +10,7 @@ import { fetchVerificationFromIpfs } from "../ipfs/pinata.js";
 import { readChainRecord, recordHashFromCanonical } from "../blockchain/registry.js";
 import { VERIFICATION_REGISTRY_ABI } from "../blockchain/abi.js";
 import { BRAND } from "../config/brand.js";
+import { classifyUrl } from "../utils/social-classifier.js";
 
 export type AuditSection = "INPUT IMAGE" | "EVIDENCE" | "BLOCKCHAIN" | "RESULT";
 
@@ -18,6 +19,8 @@ export interface AuditCheck {
   name: string;
   passed: boolean;
   detail: string;
+  /** Neutral checks (e.g. skipped) do not fail the audit but are not counted as passes. */
+  skipped?: boolean;
 }
 
 export interface AuditResult {
@@ -45,6 +48,10 @@ export async function auditVerification(
     checks.push({ section, name, passed: true, detail });
   };
 
+  const skip = (section: AuditSection, name: string, detail: string) => {
+    checks.push({ section, name, passed: true, detail, skipped: true });
+  };
+
   try {
     // ── INPUT IMAGE ──
     if (inputImagePath) {
@@ -54,12 +61,7 @@ export async function auditVerification(
       }
       pass("INPUT IMAGE", "SHA-256", `${imageHash.slice(0, 16)}… matches artifact`);
     } else {
-      checks.push({
-        section: "INPUT IMAGE",
-        name: "SHA-256",
-        passed: true,
-        detail: "skipped (pass --image to verify)",
-      });
+      skip("INPUT IMAGE", "SHA-256", "skipped (pass --image to verify)");
     }
 
     // ── EVIDENCE ──
@@ -79,18 +81,38 @@ export async function auditVerification(
     }
     pass("EVIDENCE", "IPFS CID", `${record.storage.ipfsCid} resolves and matches`);
 
-    if (record.evidence.isSocialPost === false && record.evidence.pageClassification !== "SOCIAL_POST") {
-      checks.push({
-        section: "EVIDENCE",
-        name: "Social post evidence",
-        passed: true,
-        detail: `classification: ${record.evidence.pageClassification} (non-strict record)`,
-      });
+    const liveClass = classifyUrl(record.evidence.selectedMatchUrl);
+    if (liveClass.classification !== record.evidence.pageClassification) {
+      fail(
+        "EVIDENCE",
+        "URL classification",
+        `reclassified as ${liveClass.classification}, record claims ${record.evidence.pageClassification}`
+      );
+    }
+    pass(
+      "EVIDENCE",
+      "URL classification",
+      `${liveClass.classification} on ${liveClass.platform ?? liveClass.domain ?? "unknown"}`
+    );
+
+    if (config.requireSocialMatch && liveClass.classification !== "SOCIAL_POST") {
+      fail(
+        "EVIDENCE",
+        "Social post evidence",
+        `REQUIRE_SOCIAL_MATCH=true but selected URL is ${liveClass.classification}`
+      );
+    }
+    if (liveClass.classification === "SOCIAL_POST") {
+      pass(
+        "EVIDENCE",
+        "Social post evidence",
+        `${liveClass.classification} on ${liveClass.platform ?? liveClass.domain}`
+      );
     } else {
       pass(
         "EVIDENCE",
         "Social post evidence",
-        `${record.evidence.pageClassification} on ${record.evidence.platform ?? record.evidence.domain}`
+        `classification: ${liveClass.classification} (non-strict record)`
       );
     }
 
@@ -113,6 +135,16 @@ export async function auditVerification(
       chain: sepolia,
       transport: http(config.rpcUrl),
     });
+
+    const liveChainId = await publicClient.getChainId();
+    if (liveChainId !== BRAND.chain.chainId) {
+      fail(
+        "BLOCKCHAIN",
+        "RPC chain",
+        `RPC_URL is chainId ${liveChainId}, expected ${BRAND.chain.chainId}`
+      );
+    }
+    pass("BLOCKCHAIN", "RPC chain", `chainId ${liveChainId}`);
 
     const bytecode = await publicClient.getBytecode({
       address: record.blockchain.contractAddress as `0x${string}`,
@@ -145,6 +177,18 @@ export async function auditVerification(
     if (receipt.status !== "success") {
       fail("BLOCKCHAIN", "Transaction receipt", "transaction did not succeed");
     }
+
+    const expectedTo = record.blockchain.contractAddress.toLowerCase();
+    const receiptTo = receipt.to?.toLowerCase();
+    if (!receiptTo || receiptTo !== expectedTo) {
+      fail(
+        "BLOCKCHAIN",
+        "Transaction target",
+        `receipt.to is ${receipt.to ?? "null"}, expected ${record.blockchain.contractAddress}`
+      );
+    }
+    pass("BLOCKCHAIN", "Transaction target", receipt.to!);
+
     if (Number(receipt.blockNumber) !== record.blockchain.blockNumber) {
       fail(
         "BLOCKCHAIN",
@@ -158,7 +202,10 @@ export async function auditVerification(
       `block ${receipt.blockNumber}, status success`
     );
 
-    const event = receipt.logs
+    const contractLogs = receipt.logs.filter(
+      (log) => log.address.toLowerCase() === expectedTo
+    );
+    const event = contractLogs
       .map((log) => {
         try {
           return decodeEventLog({

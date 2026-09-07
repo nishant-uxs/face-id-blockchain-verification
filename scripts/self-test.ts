@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { execSync } from "node:child_process";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 
@@ -95,15 +96,20 @@ function main(): void {
     }
   }
 
-  // Check .env not committed
+  // Local .env with secrets is expected and gitignored — fail only if tracked by git
   try {
-    const envContent = readFileSync(join(ROOT, ".env"), "utf-8");
-    if (envContent.includes("PINATA_JWT=ey") || /PRIVATE_KEY=0x[a-f0-9]{64}/i.test(envContent)) {
-      console.log("✗ Secrets appear to be in committed .env file");
+    const tracked = execSync("git ls-files --error-unmatch .env", {
+      cwd: ROOT,
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+    if (tracked) {
+      console.log("✗ .env is tracked by git — remove it from the index immediately");
       failed++;
     }
   } catch {
-    // .env not present — good
+    console.log("✓ .env is not tracked by git");
   }
 
   if (checkProviderMakesExternalCall()) {

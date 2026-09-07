@@ -1,9 +1,9 @@
-# HH Goa 2026 — Face ID + Blockchain Verification Engine
+# Face ID + Blockchain Verification
 
-> **Less Noise. More Signal.**  
-> A CLI-first verification pipeline for [Hacker House Goa 2026 Task #3](https://hhgoa.com/).
+> **Hacker House Goa 2026 — Task #3**  
+> *Less Noise. More Signal.*
 
-Detect a face → find genuine reverse-image evidence on the public web → anchor a tamper-evident commitment on **Base Sepolia** with **IPFS** storage → independently **audit** the result.
+CLI-first provenance pipeline: detect a face → discover a **genuine** reverse-image social match at runtime → pin evidence on **IPFS** → anchor a tamper-evident commitment on **Ethereum Sepolia** → independently **audit** every claim.
 
 ```
 ╭────────────────────────────────────────────╮
@@ -12,134 +12,301 @@ Detect a face → find genuine reverse-image evidence on the public web → anch
 ╰────────────────────────────────────────────╯
 ```
 
-## What does this project do?
+**Repo:** [nishant-uxs/face-id-blockchain-verification](https://github.com/nishant-uxs/face-id-blockchain-verification)  
+**Claim language:** *"Evidence found for a matching image/page"* — **not** proof of personal identity.
 
-Takes a consenting demo subject's photo and produces a **verifiable provenance record**:
+---
 
-1. Validates and hashes the input image
-2. Detects and encodes a face (Google Cloud Vision)
-3. Performs **genuine reverse-image search** (no hardcoded URLs)
-4. Selects evidence with a **transparent score breakdown**
-5. Uploads the verification JSON to **IPFS** (Pinata)
-6. Anchors `recordHash + ipfsCid` on **Base Sepolia**
-7. Supports independent **audit** of every step
+## Why this submission
 
-**Claim:** *"Evidence found for a matching image/page"* — **not** proof of personal identity.
+| Judge concern | How this repo answers |
+|---|---|
+| Hardcoded social URLs / fake txs? | `npm run self-test` scans `src/`; evidence comes only from live APIs |
+| Visually-similar spam as “match”? | Explicitly rejected — only full / partial / page matches score |
+| Profile / CDN / Wikimedia as “post”? | URL classifier requires `SOCIAL_POST` when `REQUIRE_SOCIAL_MATCH=true` |
+| Trust the JSON alone? | `npm run audit` re-hashes, re-fetches IPFS, re-reads chain + receipt |
+| Biometrics on-chain? | Chain stores only `recordHash` + `ipfsCid` — never embeddings or raw photos |
 
-## Quick Start
+---
+
+## Pipeline at a glance
+
+```mermaid
+flowchart TD
+    A[Input image] --> B[Validate MIME / size / SHA-256]
+    B --> C[Local face-api detection]
+    C --> D[Crop + descriptor hash]
+    D --> E[Reverse-image search]
+    E --> F{Qualifying SOCIAL_POST?}
+    F -->|No| G[Exit 2 — NO VERIFIED MATCH]
+    F -->|Yes| H[Transparent evidence score]
+    H --> I[Canonical JSON commitment]
+    I --> J[Pin to IPFS via Pinata]
+    J --> K[Anchor on Ethereum Sepolia]
+    K --> L[artifacts/verification.json]
+
+    L --> M[audit command]
+    M --> N[Re-hash JSON]
+    M --> O[Fetch IPFS]
+    M --> P[Read on-chain record]
+    M --> Q[Verify tx → contract + event]
+    N --> R{All checks pass?}
+    O --> R
+    P --> R
+    Q --> R
+    R -->|Yes| S[VERIFICATION VALID]
+    R -->|No| T[VERIFICATION FAILED]
+```
+
+### Sequence (happy path)
+
+```mermaid
+sequenceDiagram
+    participant CLI
+    participant Face as face-api (local)
+    participant Serp as SerpAPI Lens
+    participant IPFS as Pinata IPFS
+    participant Chain as Ethereum Sepolia
+
+    CLI->>Face: detect + encode face crop
+    Face-->>CLI: bbox, confidence, descriptorHash
+    CLI->>IPFS: host face crop (Lens query URL)
+    CLI->>Serp: google_lens + exact_matches + reverse_image
+    Serp-->>CLI: runtime match URLs
+    CLI->>CLI: classify + score (reject visual-similar)
+    CLI->>IPFS: pin committable verification JSON
+    IPFS-->>CLI: ipfsCid
+    CLI->>Chain: recordVerification(recordHash, ipfsCid)
+    Chain-->>CLI: tx hash + block
+```
+
+---
+
+## Quick start
 
 ```bash
+git clone https://github.com/nishant-uxs/face-id-blockchain-verification.git
+cd face-id-blockchain-verification
 npm install
 cp .env.example .env
-# Fill in credentials (see below)
+# Fill SERPAPI_KEY, PINATA_JWT, PRIVATE_KEY, CONTRACT_ADDRESS
 
-npm run deploy          # Deploy VerificationRegistry to Base Sepolia
-npm run verify -- ./samples/demo.jpg
+npm run deploy                              # once — writes CONTRACT_ADDRESS
+npm run verify -- ./samples/demo.jpg        # full 8-step pipeline
 npm run audit -- ./artifacts/verification.json --image ./samples/demo.jpg
 ```
 
-## Environment Variables
+**Node:** `>=20` and `<=22` (see `package.json` engines).
+
+---
+
+## Environment
 
 | Variable | Required | Description |
 |---|---|---|
-| `GOOGLE_APPLICATION_CREDENTIALS` | Yes* | Path to GCP service account JSON (Vision API) |
-| `PINATA_JWT` | Yes | Pinata API JWT for IPFS uploads |
-| `PINATA_GATEWAY` | No | IPFS gateway domain (default: `gateway.pinata.cloud`) |
-| `RPC_URL` | No | Base Sepolia RPC (default: `https://sepolia.base.org`) |
-| `PRIVATE_KEY` | Yes | Testnet wallet private key |
-| `CONTRACT_ADDRESS` | Yes | Deployed VerificationRegistry address |
-| `SERPAPI_KEY` | No | Optional secondary reverse-search provider |
-| `REQUIRE_SOCIAL_MATCH` | No | `true` to require social-domain evidence |
+| `SERPAPI_KEY` | Yes* | Primary reverse-image provider (Google Lens + reverse image) |
+| `PINATA_JWT` | Yes | IPFS uploads + temporary public URL for Lens queries |
+| `PINATA_GATEWAY` | No | Default `gateway.pinata.cloud` |
+| `PRIVATE_KEY` | Yes (verify) | Ethereum Sepolia testnet key (`0x` + 64 hex) |
+| `CONTRACT_ADDRESS` | Yes | Deployed `VerificationRegistry` |
+| `RPC_URL` | No | Default public Ethereum Sepolia RPC |
+| `GOOGLE_APPLICATION_CREDENTIALS` | No | Optional Vision **Web Detection** secondary provider |
+| `REQUIRE_SOCIAL_MATCH` | No | Default **`true`** — only `SOCIAL_POST` URLs count |
+| `FACE_SELECTION` | No | `largest` (default) or `first` |
+| `MAX_IMAGE_BYTES` | No | Default `10485760` (10 MB) |
 
-\* Or `SERPAPI_KEY` for reverse search only — face detection still requires Google Vision.
+\* Or Google Vision credentials for reverse search only. **Face detection is local** (`@vladmandic/face-api`) — Vision billing is **not** required for the happy path.
+
+---
 
 ## Commands
 
-| Command | Description |
+| Command | Purpose |
 |---|---|
-| `npm run verify -- <image>` | Run full 8-step pipeline |
-| `npm run audit -- <json> [--image <img>]` | Independently verify a record |
-| `npm run deploy` | Compile + deploy Solidity contract |
-| `npm run prepare-demo -- <src> <out>` | Crop face for demo input |
+| `npm run verify -- <image>` | Run the 8-step pipeline |
+| `npm run audit -- <json> [--image <img>]` | Independent integrity audit |
+| `npm run deploy` | Compile + deploy `VerificationRegistry.sol` |
+| `npm run prepare-demo -- <src> <out>` | Crop/normalize a demo face image |
+| `npm run compare-providers -- <image>` | Live provider smoke-check before recording |
 | `npm run self-test` | Anti-hardcoding repository scan |
-| `npm test` | Unit tests |
+| `npm test` | Offline unit + tamper tests |
+| `npm run test:failure` | Failure-mode scripts |
+
+### Exit codes (`verify`)
+
+| Code | Meaning |
+|---|---|
+| `0` | `VERIFIED` — evidence found, IPFS pinned, chain anchored |
+| `1` | Pipeline / config / infra error |
+| `2` | `NO VERIFIED MATCH FOUND` — no fake record written |
+
+---
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    IMG[Image] --> FACE[Face Detection]
-    FACE --> RIS[Reverse Image Search]
-    RIS --> EV[Evidence Scoring]
-    EV --> IPFS[IPFS Pinata]
-    EV --> CHAIN[Base Sepolia]
-    IPFS --> AUDIT[Audit Command]
-    CHAIN --> AUDIT
+    subgraph CLI
+      V[verify]
+      A[audit]
+    end
+
+    subgraph Core
+      P[pipeline/orchestrator]
+      F[face/detector]
+      R[reverse-search]
+      E[evidence/scorer + builder]
+      H[hashing/canonical]
+    end
+
+    subgraph External
+      S[SerpAPI]
+      I[Pinata IPFS]
+      C[Sepolia contract]
+    end
+
+    V --> P
+    P --> F --> R --> E --> H
+    R --> S
+    E --> I
+    H --> C
+    A --> I
+    A --> C
 ```
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for full details.
-
-## What counts as a genuine match?
-
-| Match Type | Accepted as Evidence? |
+| Module | Responsibility |
 |---|---|
-| `fullMatchingImages` | ✅ Yes (strongest) |
-| `partialMatchingImages` | ✅ Yes (lower score) |
-| `pagesWithMatchingImages` | ✅ Yes |
-| `visuallySimilarImages` | ❌ No — explicitly rejected |
+| `src/face/` | Local SSD MobileNet face detect + 128-D descriptor hash (no raw embedding on chain) |
+| `src/reverse-search/` | Provider interface; SerpAPI Lens primary; Vision Web Detection optional |
+| `src/evidence/` | URL classification, transparent scoring, commitment JSON |
+| `src/ipfs/` | Pinata pin + gateway fetch |
+| `src/blockchain/` | viem wallet/public clients + `VerificationRegistry` |
+| `src/audit/` | Re-verify hash, IPFS, social classification, receipt → contract |
 
-Evidence must come from a **runtime API response**, never hardcoded.
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for commitment model details.
 
-## Why this is not hardcoded
+---
 
-- `npm run self-test` scans `src/` for social URLs, fake tx hashes, mock providers
-- Reverse-image providers call external APIs (`annotateImage`, SerpAPI `fetch`)
-- Evidence URLs are selected at runtime from API results
-- Audit re-fetches IPFS and reads on-chain state independently
+## What counts as evidence?
 
-## What is stored where?
+```mermaid
+flowchart TD
+    API[Live reverse-image API results] --> Full[fullMatching / exact_matches]
+    API --> Partial[partial / reverse-image hits]
+    API --> Pages[matching pages]
+    API --> Similar[visuallySimilar]
 
-| Location | Data |
+    Full --> Score[Eligible for scoring]
+    Partial --> Score
+    Pages --> Score
+    Similar --> Reject[Explicitly rejected]
+
+    Score --> Class{URL classifier}
+    Class -->|SOCIAL_POST| Accept[Accepted in strict mode]
+    Class -->|profile / CDN / Wikimedia / other| Drop[Rejected when REQUIRE_SOCIAL_MATCH=true]
+```
+
+| Result type | Accepted? |
 |---|---|
-| **IPFS** | Committable verification JSON (metadata, search results, evidence) |
-| **On-chain** | `recordHash`, `ipfsCid`, `timestamp`, `submitter` |
-| **Never on-chain** | Raw face embeddings, API keys, full images |
+| Exact / full matches | Yes (strongest) |
+| Partial / reverse-image pages | Yes (lower) |
+| Matching pages (with stronger signals) | Yes |
+| Visually similar only | **No** |
+| Hardcoded URL in source | **No** — self-test fails |
+
+---
+
+## Commitment model
+
+```mermaid
+flowchart TB
+    subgraph Committable["Committable JSON (hashed)"]
+      I[input metadata]
+      F[face bbox + descriptorHash]
+      R[full reverse-search payload]
+      E[selected evidence + score]
+    end
+
+    Committable -->|SHA-256 of key-sorted JSON| Hash[recordHash]
+    Committable -->|Pinata| CID[ipfsCid]
+    Hash --> Chain[VerificationRegistry on Sepolia]
+    CID --> Chain
+```
+
+- **IPFS:** full committable verification document  
+- **On-chain:** `recordHash`, `ipfsCid`, `timestamp`, `submitter`  
+- **Never on-chain:** raw images, face embeddings, API keys  
+
+Hashing uses **deterministic key-sorted JSON** (not full RFC 8785 JCS).
+
+---
 
 ## Why Ethereum Sepolia?
 
-- Real EVM public testnet (chainId `11155111`)
-- Easy faucet access for demos (no Base mainnet-balance gate)
-- Official explorer at [sepolia.etherscan.io](https://sepolia.etherscan.io)
-- viem / Solidity tooling works unchanged
+- Public EVM testnet (`chainId` `11155111`) with reliable faucet access  
+- Explorer: [sepolia.etherscan.io](https://sepolia.etherscan.io)  
+- Pipeline **asserts** RPC `chainId` before anchoring (wrong RPC → hard fail)
 
-## Demo
+---
 
-See [DEMO.md](./DEMO.md) for the full screen-recording workflow.
+## Demo workflow
+
+Consenting subject must have a **public social post** of the same photo (post URL, not only a profile DP), indexed by Lens / reverse image.
 
 ```bash
-npm run prepare-demo -- ./samples/source.jpg ./samples/demo.jpg
+npm run prepare-demo -- ./path/to/photo.jpg ./samples/demo.jpg
+npm run compare-providers -- ./samples/demo.jpg   # expect SOCIAL_POST
 npm run verify -- ./samples/demo.jpg
 npm run audit -- ./artifacts/verification.json --image ./samples/demo.jpg
 ```
 
-## What happens if no match is found?
+Full screen-recording script: [DEMO.md](./DEMO.md).
 
-The pipeline exits with:
+---
 
+## Anti-hardcoding guarantees
+
+1. Reverse search calls SerpAPI / Vision over the network  
+2. Evidence URLs are selected only from that response  
+3. `REQUIRE_SOCIAL_MATCH=true` by default  
+4. `npm run self-test` fails on social URLs / fake tx patterns in `src/`  
+5. Audit re-classifies the selected URL and checks `receipt.to === contract`
+
+---
+
+## Security & privacy
+
+Designed for **consenting demo subjects** only.
+
+- Temporary **face-crop JPEG** may be pinned publicly so Google Lens can fetch a query URL (Pinata gateway) — see [SECURITY.md](./SECURITY.md)  
+- Descriptor stored is a **hash**, not a recognition template database  
+- Rotate any keys that were ever pasted into chat or screenshots  
+
+---
+
+## Tests
+
+```bash
+npm test              # 24 offline tests (hashing, scoring, classifier, tamper)
+npm run self-test     # repository anti-hardcoding scan
+npm run test:failure  # failure-mode harness
 ```
-NO VERIFIED MATCH FOUND
-```
 
-No fake verification record is written. No blockchain transaction is submitted.
+---
 
-## Documentation
+## Documentation map
 
-- [RESEARCH.md](./RESEARCH.md) — API evaluation and technology choices
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — System design
-- [LIMITATIONS.md](./LIMITATIONS.md) — Known constraints
-- [DEMO.md](./DEMO.md) — Demo preparation guide
-- [SECURITY.md](./SECURITY.md) — Privacy and security model
+| Doc | Contents |
+|---|---|
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | System design + module map |
+| [RESEARCH.md](./RESEARCH.md) | Provider / stack evaluation |
+| [DEMO.md](./DEMO.md) | Unedited recording checklist |
+| [SECURITY.md](./SECURITY.md) | Privacy boundary + threat model |
+| [LIMITATIONS.md](./LIMITATIONS.md) | Honest constraints |
+| [E2E_VALIDATION.md](./E2E_VALIDATION.md) | Live validation checklist |
+
+---
 
 ## License
 
-MIT
+MIT — built for [Hacker House Goa 2026](https://hhgoa.com/) Task #3.

@@ -1,6 +1,5 @@
 import chalk from "chalk";
 import boxen from "boxen";
-import ora from "ora";
 import { BRAND } from "../config/brand.js";
 import type { AuditCheck, AuditSection } from "../audit/verifier.js";
 
@@ -94,14 +93,6 @@ export function createStepLogger(totalSteps: number) {
   };
 }
 
-export function createSpinner(text: string) {
-  return ora({
-    text,
-    color: "green",
-    spinner: "dots",
-  });
-}
-
 export function printEvidenceScore(components: Array<{ label: string; points: number }>, total: number): void {
   console.log(chalk.hex(BRAND.colors.cream).bold("\nEvidence score:"));
   for (const c of components) {
@@ -123,18 +114,13 @@ export function printAuditReport(checks: AuditCheck[]): void {
 
     console.log(chalk.hex(BRAND.colors.yellow).bold(section));
     for (const check of sectionChecks) {
-      const icon = check.passed ? chalk.green("✓") : chalk.red("✗");
+      const icon = check.skipped
+        ? chalk.hex(BRAND.colors.muted)("–")
+        : check.passed
+          ? chalk.green("✓")
+          : chalk.red("✗");
       console.log(`  ${icon} ${check.name}: ${chalk.hex(BRAND.colors.muted)(check.detail)}`);
     }
     console.log();
-  }
-}
-
-export function printAuditChecks(
-  checks: Array<{ name: string; passed: boolean; detail: string }>
-): void {
-  for (const check of checks) {
-    const icon = check.passed ? chalk.green("✓") : chalk.red("✗");
-    console.log(`  ${icon} ${check.name}: ${chalk.hex(BRAND.colors.muted)(check.detail)}`);
   }
 }

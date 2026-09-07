@@ -2,7 +2,7 @@ import { PinataSDK } from "pinata";
 import type { AppConfig } from "../config/env.js";
 
 export async function uploadVerificationJson(
-  record: Record<string, unknown>,
+  record: unknown,
   config: Pick<AppConfig, "pinataJwt" | "pinataGateway">
 ): Promise<string> {
   if (!config.pinataJwt) {
@@ -14,7 +14,9 @@ export async function uploadVerificationJson(
     pinataGateway: config.pinataGateway,
   });
 
-  const upload = await pinata.upload.public.json(record).name(`verification-${Date.now()}.json`);
+  const upload = await pinata.upload.public
+    .json(record as Record<string, unknown>)
+    .name(`verification-${Date.now()}.json`);
 
   if (!upload.cid) {
     throw new Error("Pinata upload succeeded but no CID returned");

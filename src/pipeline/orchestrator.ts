@@ -90,10 +90,7 @@ export async function runVerificationPipeline(
   onDetail?.(`canonical SHA-256 ${canonicalJsonSha256.slice(0, 16)}…`);
 
   onStep?.(7, TOTAL_STEPS, "Uploading evidence to IPFS");
-  const ipfsCid = await uploadVerificationJson(
-    committable as unknown as Record<string, unknown>,
-    config
-  );
+  const ipfsCid = await uploadVerificationJson(committable, config);
   onDetail?.(`CID: ${ipfsCid}`);
 
   onStep?.(8, TOTAL_STEPS, "Anchoring on Ethereum Sepolia");

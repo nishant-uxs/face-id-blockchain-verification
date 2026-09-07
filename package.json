@@ -1,7 +1,11 @@
 {
-  "name": "hh-goa-verification-engine",
+  "name": "face-id-blockchain-verification",
   "version": "1.0.0",
-  "description": "HH Goa 2026 Task #3 — Face ID + Blockchain Verification Pipeline",
+  "description": "HH Goa 2026 Task #3 — Face ID + Blockchain Verification (CLI pipeline)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nishant-uxs/face-id-blockchain-verification.git"
+  },
   "type": "module",
   "engines": {
     "node": ">=20 <=22"
@@ -20,11 +24,13 @@
   },
   "keywords": [
     "hacker-house-goa",
+    "face-id",
     "face-detection",
     "reverse-image-search",
     "blockchain",
-    "base-sepolia",
-    "ipfs"
+    "ethereum-sepolia",
+    "ipfs",
+    "serpapi"
   ],
   "license": "MIT",
   "dependencies": {
@@ -37,7 +43,6 @@
     "chalk": "^5.4.1",
     "commander": "^13.1.0",
     "dotenv": "^16.4.7",
-    "ora": "^8.2.0",
     "pinata": "^2.1.0",
     "sharp": "^0.33.5",
     "viem": "^2.23.5"

@@ -2,20 +2,19 @@
 
 ## Prerequisites
 
-1. GCP project with **Cloud Vision API** enabled
-2. Service account JSON with Vision API access
+1. Node 20–22 + `npm install`
+2. **SerpAPI** key (primary reverse-image provider)
 3. Pinata account + JWT
-4. Base Sepolia wallet with test ETH
-5. Deployed `VerificationRegistry` contract
+4. Ethereum Sepolia wallet with test ETH
+5. Deployed `VerificationRegistry` contract (`npm run deploy`)
 6. **`REQUIRE_SOCIAL_MATCH=true`** in `.env` (default)
-7. Consenting subject with a **public social-media post** already indexed
+7. Consenting subject with a **public social-media post** already indexed (post URL, not only a profile DP)
+8. Optional: Google Vision credentials (secondary reverse-search only)
 
 ## Step 1: Prepare consenting subject image
 
-The demo subject must **consent** and have posted their photo publicly (X, Instagram, LinkedIn).
-
 ```bash
-# Verify providers find the social post BEFORE full pipeline:
+# Live check that providers discover a SOCIAL_POST BEFORE full pipeline:
 npm run compare-providers -- ./samples/demo.jpg
 
 # Create derived local copy (crop/resize — NOT the exact downloaded file):
@@ -30,8 +29,9 @@ cp .env.example .env
 ```
 
 Required:
+
 ```
-GOOGLE_APPLICATION_CREDENTIALS=./credentials.json
+SERPAPI_KEY=
 PINATA_JWT=
 PRIVATE_KEY=0x...
 CONTRACT_ADDRESS=0x...
@@ -54,9 +54,9 @@ Open a fresh terminal. Record the entire session with no cuts.
 ### Scene 1 — Repository context (15 sec)
 
 ```bash
-cd hacker-house-goa-task3
+cd face-id-blockchain-verification
 git log --oneline -5
-cat .env.example | grep REQUIRE_SOCIAL_MATCH
+# show REQUIRE_SOCIAL_MATCH default in .env.example
 ```
 
 Say: *"REQUIRE_SOCIAL_MATCH is true — only genuine social posts qualify."*
@@ -76,23 +76,25 @@ npm run verify -- ./samples/demo.jpg
 ```
 
 Watch for all 8 stages:
-1. Image loaded + SHA-256
-2. Face detected (Google Vision API)
-3. Face encoding hash
-4. Reverse-image search — **live API call**
-5. Evidence selected — **SOCIAL_POST** classification shown
-6. Canonical commitment hash
-7. IPFS CID
-8. Base Sepolia transaction confirmed
+
+1. Image loaded + SHA-256  
+2. Face detected (local face-api)  
+3. Face encoding hash  
+4. Reverse-image search — **live SerpAPI call**  
+5. Evidence selected — **SOCIAL_POST** classification shown  
+6. Canonical commitment hash  
+7. IPFS CID  
+8. Ethereum Sepolia transaction confirmed  
 
 Copy the explorer URL from output.
 
 ### Scene 4 — Open evidence (30 sec)
 
 In browser (optional but compelling):
-- Open the discovered social post URL
-- Open `https://sepolia.basescan.org/tx/<tx_hash>`
-- Open `https://gateway.pinata.cloud/ipfs/<cid>`
+
+- Open the discovered social post URL  
+- Open `https://sepolia.etherscan.io/tx/<tx_hash>`  
+- Open `https://gateway.pinata.cloud/ipfs/<cid>`  
 
 ### Scene 5 — Independent audit (1 min)
 
@@ -100,49 +102,22 @@ In browser (optional but compelling):
 npm run audit -- ./artifacts/verification.json --image ./samples/demo.jpg
 ```
 
-Expected final screen:
+Expect every section to pass (input hash, canonical JSON, IPFS, URL classification, chain, receipt → contract).
 
-```
-╭────────────────────────────────────────╮
-│       ✓ VERIFICATION VALID              │
-│  Evidence integrity confirmed on-chain │
-╰────────────────────────────────────────╯
-```
+### Scene 6 — Tamper proof (optional, 30 sec)
 
-### Scene 6 — Tamper proof (optional, 1 min)
-
-```bash
-# Modify artifact (change one field), then audit — should FAIL
-# Restore original, audit again — should PASS
-```
+Edit one field in `artifacts/verification.json`, re-run audit — expect **VERIFICATION FAILED**.
 
 ---
 
-## What judges should see
-
-| Signal | Evidence |
-|---|---|
-| Genuine reverse search | API provider name + live match counts in terminal |
-| Not hardcoded | URL discovered at runtime, varies per image |
-| Social post | `classification: SOCIAL_POST` in output |
-| Real blockchain | Basescan tx link opens to real transaction |
-| Real IPFS | CID resolves to verification JSON |
-| Tamper-evident | Audit fails on modified artifact |
-
 ## Troubleshooting
 
-| Issue | Solution |
+| Symptom | Fix |
 |---|---|
-| NO VERIFIED MATCH FOUND | Post must be indexed; try `compare-providers` first |
-| Only Wikimedia results | Wrong image — use consenting subject's social post |
-| Profile URL only | Not a post — need `/status/`, `/p/`, etc. |
-| Missing credentials | Check `.env` |
-| Transaction reverted | Fund wallet on Base Sepolia |
-| Already recorded | Use new image or new verification |
+| `NO VERIFIED MATCH FOUND` | Post the photo publicly; wait for indexing; re-run compare-providers |
+| SerpAPI all engines failed | Check `SERPAPI_KEY` / quota |
+| Wrong chain | Ensure `RPC_URL` is Ethereum Sepolia (`11155111`), not Base |
+| Transaction reverted | Fund wallet on Ethereum Sepolia |
+| Face not detected | Use a clearer frontal face crop via `prepare-demo` |
 
-## Do NOT use for submission
-
-- Wikimedia / Wikipedia images
-- `REQUIRE_SOCIAL_MATCH=false`
-- Pre-recorded or edited terminal output
-- Hardcoded expected URLs
+See [LIMITATIONS.md](./LIMITATIONS.md) and [E2E_VALIDATION.md](./E2E_VALIDATION.md).

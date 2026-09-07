@@ -8,7 +8,8 @@ import { privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
 import { VERIFICATION_REGISTRY_ABI } from "./abi.js";
 import type { AppConfig } from "../config/env.js";
-import { sha256HexWithPrefix } from "../hashing/sha256.js";
+import { BRAND } from "../config/brand.js";
+import { PipelineError } from "../utils/errors.js";
 
 export interface ChainRecordResult {
   transactionHash: Hash;
@@ -20,6 +21,20 @@ export function recordHashFromCanonical(canonicalSha256Hex: string): `0x${string
   return `0x${canonicalSha256Hex}` as `0x${string}`;
 }
 
+async function assertEthereumSepolia(rpcUrl: string): Promise<void> {
+  const publicClient = createPublicClient({
+    chain: sepolia,
+    transport: http(rpcUrl),
+  });
+  const chainId = await publicClient.getChainId();
+  if (chainId !== BRAND.chain.chainId) {
+    throw new PipelineError(
+      `RPC_URL points to chainId ${chainId}, expected Ethereum Sepolia (${BRAND.chain.chainId})`,
+      "WRONG_CHAIN"
+    );
+  }
+}
+
 export async function anchorOnChain(params: {
   config: AppConfig;
   canonicalJsonSha256: string;
@@ -28,11 +43,19 @@ export async function anchorOnChain(params: {
   const { config, canonicalJsonSha256, ipfsCid } = params;
 
   if (!config.contractAddress) {
-    throw new Error("CONTRACT_ADDRESS is required");
+    throw new PipelineError("CONTRACT_ADDRESS is required", "MISSING_CONTRACT");
   }
   if (!config.privateKey) {
-    throw new Error("PRIVATE_KEY is required for blockchain operations");
+    throw new PipelineError(
+      "PRIVATE_KEY is required for blockchain operations",
+      "MISSING_PRIVATE_KEY"
+    );
   }
+  if (!ipfsCid.trim()) {
+    throw new PipelineError("ipfsCid must be a non-empty string", "INVALID_IPFS_CID");
+  }
+
+  await assertEthereumSepolia(config.rpcUrl);
 
   const recordHash = recordHashFromCanonical(canonicalJsonSha256);
   const account = privateKeyToAccount(config.privateKey);
@@ -49,7 +72,10 @@ export async function anchorOnChain(params: {
   });
 
   if (existing[2] !== 0n) {
-    throw new Error(`Record already anchored on-chain for hash ${recordHash}`);
+    throw new PipelineError(
+      `Record already anchored on-chain for hash ${recordHash}`,
+      "DUPLICATE_ON_CHAIN"
+    );
   }
 
   const hash = await walletClient.writeContract({
@@ -67,7 +93,7 @@ export async function anchorOnChain(params: {
   });
 
   if (receipt.status !== "success") {
-    throw new Error(`Transaction reverted: ${hash}`);
+    throw new PipelineError(`Transaction reverted: ${hash}`, "TX_REVERTED");
   }
 
   return {
@@ -82,7 +108,7 @@ export async function readChainRecord(
   recordHash: `0x${string}`
 ): Promise<{ recordHash: `0x${string}`; ipfsCid: string; timestamp: bigint; submitter: string }> {
   if (!config.contractAddress) {
-    throw new Error("CONTRACT_ADDRESS is required");
+    throw new PipelineError("CONTRACT_ADDRESS is required", "MISSING_CONTRACT");
   }
 
   const publicClient = createPublicClient({
@@ -103,8 +129,4 @@ export async function readChainRecord(
     timestamp: result[2],
     submitter: result[3],
   };
-}
-
-export function computeRecordHashFromContent(content: string): `0x${string}` {
-  return sha256HexWithPrefix(content);
 }
