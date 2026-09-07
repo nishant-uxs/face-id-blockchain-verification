@@ -58,7 +58,9 @@ export async function runVerificationPipeline(
   onStep?.(4, TOTAL_STEPS, "Reverse-image search");
   const provider = createReverseImageProvider(config);
   onDetail?.(`provider: ${provider.name}`);
-  const reverseSearch = await provider.search(face.faceCropBuffer, face.faceCropSha256);
+  // Search the validated input image (not the tiny 224×224 encoding crop) — Lens needs enough pixels.
+  const reverseSearch = await provider.search(image.buffer, image.sha256);
+  onDetail?.(`query: full input image (${image.width}×${image.height})`);
   onDetail?.(`full matches: ${reverseSearch.fullMatches.length}`);
   onDetail?.(`partial matches: ${reverseSearch.partialMatches.length}`);
   onDetail?.(`matching pages: ${reverseSearch.matchingPages.length}`);

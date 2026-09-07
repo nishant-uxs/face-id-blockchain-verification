@@ -86,12 +86,13 @@ export class SerpApiLensProvider implements ReverseImageProvider {
       }
     }
 
-    // Organic Lens hits are weak — only keep as pages when stronger match signals already exist
-    const hasStrongerMatch = fullMatches.length > 0 || partialMatches.length > 0;
-    if (hasStrongerMatch) {
-      for (const o of lensDefault.organic_results ?? []) {
-        if (o.link) matchingPages.push({ url: o.link, pageTitle: o.title });
-      }
+    // Lens organic results often include the real social posts — keep them as matching pages.
+    // (Strict SOCIAL_POST filter still applies in the scorer.)
+    for (const o of lensDefault.organic_results ?? []) {
+      if (o.link) matchingPages.push({ url: o.link, pageTitle: o.title });
+    }
+    for (const o of lensExact.organic_results ?? []) {
+      if (o.link) matchingPages.push({ url: o.link, pageTitle: o.title });
     }
 
     return {
