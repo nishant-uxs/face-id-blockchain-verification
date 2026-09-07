@@ -20,8 +20,9 @@ contract VerificationRegistry {
         address indexed submitter
     );
 
-    /// @notice Anchor a verification record. Reverts if recordHash already exists.
+    /// @notice Anchor a verification record. Reverts if recordHash already exists or CID empty.
     function recordVerification(bytes32 recordHash, string calldata ipfsCid) external {
+        require(bytes(ipfsCid).length > 0, "Empty IPFS CID");
         require(records[recordHash].timestamp == 0, "Already recorded");
 
         records[recordHash] = Verification({

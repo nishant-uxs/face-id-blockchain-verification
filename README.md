@@ -5,6 +5,8 @@
 
 CLI-first provenance pipeline: detect a face → discover a **genuine** reverse-image social match at runtime → pin evidence on **IPFS** → anchor a tamper-evident commitment on **Ethereum Sepolia** → independently **audit** every claim.
 
+**Judges:** start here → **[JUDGES.md](./JUDGES.md)** (90-second brief) · then run `npm run check`.
+
 ```
 ╭────────────────────────────────────────────╮
 │        HH GOA // VERIFICATION ENGINE       │
@@ -14,6 +16,23 @@ CLI-first provenance pipeline: detect a face → discover a **genuine** reverse-
 
 **Repo:** [nishant-uxs/face-id-blockchain-verification](https://github.com/nishant-uxs/face-id-blockchain-verification)  
 **Claim language:** *"Evidence found for a matching image/page"* — **not** proof of personal identity.
+
+---
+
+## Offline proof (no API keys)
+
+Anyone can validate the integrity story without credentials:
+
+```bash
+npm install
+npm run check    # vitest + self-test + tsc
+```
+
+| Gate | What it proves |
+|---|---|
+| `npm test` | Canonical hashing, social URL classifier, tamper detection |
+| `npm run self-test` | No hardcoded social posts / mock providers; `.env` not tracked |
+| `npm run typecheck` | TypeScript builds clean |
 
 ---
 
@@ -123,6 +142,7 @@ npm run audit -- ./artifacts/verification.json --image ./samples/demo.jpg
 
 | Command | Purpose |
 |---|---|
+| `npm run check` | **Offline gate:** tests + self-test + typecheck |
 | `npm run verify -- <image>` | Run the 8-step pipeline |
 | `npm run audit -- <json> [--image <img>]` | Independent integrity audit |
 | `npm run deploy` | Compile + deploy `VerificationRegistry.sol` |
@@ -130,6 +150,7 @@ npm run audit -- ./artifacts/verification.json --image ./samples/demo.jpg
 | `npm run compare-providers -- <image>` | Live provider smoke-check before recording |
 | `npm run self-test` | Anti-hardcoding repository scan |
 | `npm test` | Offline unit + tamper tests |
+| `npm run typecheck` | `tsc --noEmit` |
 | `npm run test:failure` | Failure-mode scripts |
 
 ### Exit codes (`verify`)
@@ -298,12 +319,15 @@ npm run test:failure  # failure-mode harness
 
 | Doc | Contents |
 |---|---|
+| **[JUDGES.md](./JUDGES.md)** | **Start here** — 90-second judge brief |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | System design + module map |
 | [RESEARCH.md](./RESEARCH.md) | Provider / stack evaluation |
 | [DEMO.md](./DEMO.md) | Unedited recording checklist |
 | [SECURITY.md](./SECURITY.md) | Privacy boundary + threat model |
 | [LIMITATIONS.md](./LIMITATIONS.md) | Honest constraints |
 | [E2E_VALIDATION.md](./E2E_VALIDATION.md) | Live validation checklist |
+| [SCHEMA.md](./SCHEMA.md) | `verification.json` field reference |
+| [LICENSE](./LICENSE) | MIT |
 
 ---
 

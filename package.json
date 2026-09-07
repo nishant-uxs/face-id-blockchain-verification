@@ -6,12 +6,17 @@
     "type": "git",
     "url": "https://github.com/nishant-uxs/face-id-blockchain-verification.git"
   },
+  "homepage": "https://github.com/nishant-uxs/face-id-blockchain-verification#readme",
+  "bugs": {
+    "url": "https://github.com/nishant-uxs/face-id-blockchain-verification/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=20 <=22"
   },
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "verify": "tsx src/cli/index.ts verify",
     "audit": "tsx src/cli/index.ts audit",
     "deploy": "tsx scripts/deploy.ts",
@@ -19,6 +24,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:failure": "tsx scripts/failure-tests.ts",
+    "check": "npm test && npm run self-test && npm run typecheck",
     "compare-providers": "tsx scripts/compare-providers.ts",
     "prepare-demo": "tsx scripts/prepare-demo.ts"
   },

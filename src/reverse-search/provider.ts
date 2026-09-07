@@ -1,4 +1,5 @@
 import type { AppConfig } from "../config/env.js";
+import { PipelineError } from "../utils/errors.js";
 import { GoogleVisionWebDetectionProvider } from "./google-vision.js";
 import { SerpApiLensProvider } from "./serpapi.js";
 import type { ReverseImageProvider, ReverseImageResult } from "./types.js";
@@ -26,7 +27,10 @@ export class CompositeReverseImageProvider implements ReverseImageProvider {
     }
 
     if (results.length === 0) {
-      throw new Error(`All reverse-image providers failed:\n${errors.join("\n")}`);
+      throw new PipelineError(
+        `All reverse-image providers failed:\n${errors.join("\n")}`,
+        "REVERSE_SEARCH_PROVIDER_FAILED"
+      );
     }
 
     return mergeResults(results, queryImageSha256);
@@ -72,7 +76,7 @@ export function createReverseImageProvider(config: AppConfig): ReverseImageProvi
   }
 
   if (providers.length === 0) {
-    throw new Error("No reverse-image provider configured");
+    throw new PipelineError("No reverse-image provider configured", "MISSING_REVERSE_SEARCH_PROVIDER");
   }
 
   if (providers.length === 1) {

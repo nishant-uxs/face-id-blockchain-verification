@@ -65,8 +65,13 @@ async function main(): Promise<void> {
   });
 
   const balance = await publicClient.getBalance({ address: account.address });
+  const chainId = await publicClient.getChainId();
   console.log(`Deploying from ${account.address}…`);
+  console.log(`RPC chainId: ${chainId} (expect 11155111 Ethereum Sepolia)`);
   console.log(`Balance: ${balance} wei`);
+  if (chainId !== 11155111) {
+    throw new Error(`Wrong chain: RPC returned ${chainId}, need Ethereum Sepolia 11155111`);
+  }
   if (balance === 0n) {
     throw new Error(
       "Wallet has 0 ETH on Ethereum Sepolia. Get test ETH from a Sepolia faucet, then retry."
